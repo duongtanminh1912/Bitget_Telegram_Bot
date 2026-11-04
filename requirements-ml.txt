@@ -1,0 +1,6 @@
+numpy==2.2.6
+pandas==2.3.3
+scikit-learn==1.7.2
+lightgbm==4.6.0
+joblib==1.5.2
+TA-Lib==0.6.8

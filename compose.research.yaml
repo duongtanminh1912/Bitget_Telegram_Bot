@@ -1,0 +1,28 @@
+name: bitget-research
+services:
+  shadow:
+    build:
+      context: .
+      dockerfile: Dockerfile.research
+    command: ["python", "-m", "research.shadow", "--artifacts", "/app/artifacts/v2", "--db", "/app/shadow/forward.db"]
+    restart: unless-stopped
+    volumes:
+      - ./artifacts:/app/artifacts:ro
+      - ./data/shadow:/app/shadow
+    user: "10001:10001"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+  shadow-indicators:
+    build:
+      context: .
+      dockerfile: Dockerfile.research
+    command: ["python", "-m", "research.shadow", "--artifacts", "/app/artifacts/v3", "--db", "/app/shadow/forward_v3.db"]
+    restart: unless-stopped
+    volumes:
+      - ./artifacts:/app/artifacts:ro
+      - ./data/shadow:/app/shadow
+    user: "10001:10001"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]

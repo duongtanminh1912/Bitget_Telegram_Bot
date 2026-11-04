@@ -1,0 +1,15 @@
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile.research
+    command: ["python", "-m", "bot.main"]
+    environment:
+      TRADING_MODE: paper
+      MODEL_DIR: /app/artifacts
+      FORWARD_DB: /app/shadow/forward.db
+      INDICATOR_DB: /app/shadow/forward_v3.db
+    user: "10001:10001"
+    volumes:
+      - ./artifacts:/app/artifacts:ro
+      - ./data/shadow:/app/shadow:ro
