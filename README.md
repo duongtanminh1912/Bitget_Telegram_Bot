@@ -1,40 +1,42 @@
 # Bitget Telegram Bot — Starter v0.1
 
-Bộ khung Python 3.12 cho Dương Tấn Minh. **Chỉ mô phỏng. Chưa phải bot AI giao dịch tiền thật.** Không cần và không nhận API key Bitget. Không có endpoint đặt lệnh lên sàn. `TRADING_MODE=live` khiến chương trình từ chối khởi động.
+Python 3.12 paper trading and market observation for Duong Tan Minh. **Simulation and research only. No real-money trading.** The application does not require or accept Bitget API keys and has no exchange order-placement endpoints. Setting `TRADING_MODE=live` prevents startup.
 
-## 1. Chạy thử ngay, không cần mạng
+The basic paper engine is deterministic. The optional research pipelines add BTCUSDT M15 models and prospective forward testing, described in sections 8–11.
 
-Giải nén, mở terminal trong thư mục `Bitget_Telegram_Bot`:
+## 1. Run the offline demo
+
+Open a terminal in the `Bitget_Telegram_Bot` directory:
 
 ```bash
 python3 -m bot.demo
 python3 -m unittest discover -s tests -v
 ```
 
-Demo tạo một lệnh long giả lập, duyệt lệnh và mô phỏng chốt lời. Giá 100 trong demo chỉ là dữ liệu kiểm thử, không phải giá BTC. Không cần cài thư viện Python bên ngoài.
+The demo proposes a simulated long position, approves it, and simulates a take-profit exit. Its price of 100 is test data, not a BTC quote. The basic demo and engine require no third-party Python packages. ML-specific tests are skipped when their optional dependencies are unavailable.
 
-## 2. Cấu hình Telegram
+## 2. Configure Telegram
 
-1. Trên Telegram, mở tài khoản chính thức `@BotFather`, dùng `/newbot`, đặt tên và lấy bot token. Giữ token trên máy của bạn.
-2. Nhắn `/start` cho bot vừa tạo để mở cuộc trò chuyện riêng.
-3. Lấy Telegram user ID và private chat ID từ một bản cập nhật `getUpdates` của chính bot. Trong trò chuyện riêng, chat ID thường bằng user ID; dùng ID thực nhận được. Xem tài liệu chính thức bên dưới. Nếu đã cấu hình webhook cho bot này, gỡ webhook trước khi dùng long polling. Không chạy hai phiên bot cùng lúc.
-4. Sao chép `.env.example` thành `.env`, điền `TELEGRAM_BOT_TOKEN`, `TELEGRAM_USER_ID`, `TELEGRAM_CHAT_ID`. Không commit hoặc gửi file `.env` lên chat/GitHub.
+1. Open the official `@BotFather` account on Telegram, send `/newbot`, choose a name, and obtain the bot token. Keep the token on your machine.
+2. Send `/start` to your new bot to open a private conversation.
+3. Obtain your Telegram user ID and private chat ID from an update returned by your bot's `getUpdates` method. These IDs are usually equal in a private chat; use the actual values returned. See the official documentation below. Remove any existing webhook before using long polling. Do not run two polling instances for the same bot.
+4. Copy `.env.example` to `.env` and fill in `TELEGRAM_BOT_TOKEN`, `TELEGRAM_USER_ID`, and `TELEGRAM_CHAT_ID`. Do not commit `.env` or share it in chat or on GitHub.
 
 ```bash
 cp .env.example .env
-# Chỉnh .env bằng trình soạn thảo của bạn
+# Edit .env with your text editor
 
 docker compose up -d --build
 docker compose logs --tail=50 -f
 ```
 
-Không có cổng HTTP nào cần mở. Volume `paper-data` giữ số dư, vị thế, tín hiệu, offset Telegram và nhật ký qua lần khởi động lại. `docker compose down` giữ volume; thêm `-v` sẽ xóa dữ liệu mô phỏng. Chỉ chạy một instance trên một volume.
+No HTTP ports need to be exposed. The `paper-data` volume preserves balances, positions, signals, the Telegram offset, and audit logs across restarts. `docker compose down` preserves the volume; adding `-v` deletes the simulated account data. Run only one instance per paper volume.
 
-Nếu không dùng Docker: export các biến trong `.env` qua cơ chế môi trường của terminal/IDE và đổi `DB_PATH` thành `paper.db` trong thư mục có quyền ghi. Chương trình không tự đọc `.env` khi chạy trực tiếp. Sau đó chạy `python3 -m bot.main`.
+Without Docker, export the variables from `.env` through your terminal or IDE and set `DB_PATH` to `paper.db` in a writable directory. Direct execution does not automatically load `.env`. Then run `python3 -m bot.main`.
 
-### Lấy ID mà không đưa token vào lịch sử lệnh
+### Retrieve IDs without putting the token in shell history
 
-Dừng các phiên bot đang polling, gửi một tin nhắn mới cho bot trong **chat riêng**, rồi chạy đoạn sau. Token được nhập ẩn; đoạn mã chỉ in user ID và chat ID, không in nội dung tin nhắn. Không gửi token cho người khác.
+Stop any polling instances, send a new message to your bot in a **private chat**, and run the following snippet. Token input is hidden. Only user and chat IDs are printed, not message contents. Keep the token private.
 
 ```bash
 python3 - <<'PY'
@@ -46,13 +48,13 @@ try:
     base = 'https://api.telegram.org/bot' + token + '/'
     hook = request(base + 'getWebhookInfo', {})
     if not hook.get('ok'):
-        print('Không xác thực được bot; kiểm tra token.')
+        print('Bot authentication failed; check the token.')
     elif hook['result'].get('url'):
-        print('Bot đang dùng webhook. Gỡ webhook trước khi dùng polling.')
+        print('The bot has a webhook. Remove it before using polling.')
     else:
         result = request(base + 'getUpdates', {'timeout': 0, 'allowed_updates': ['message', 'callback_query']})
         if not result.get('ok'):
-            print('Không lấy được updates; kiểm tra token và phiên polling khác.')
+            print('Could not retrieve updates; check the token and other polling instances.')
         found = False
         for update in result.get('result', []):
             message = update.get('message', {})
@@ -61,15 +63,15 @@ try:
                 print('TELEGRAM_CHAT_ID=' + str(message['chat']['id']))
                 found = True
         if result.get('ok') and not found:
-            print('Chưa có tin nhắn riêng. Gửi tin nhắn mới cho bot rồi chạy lại.')
+            print('No private message found. Send a new message to the bot and try again.')
 except Exception:
-    print('Không kết nối được Telegram; kiểm tra mạng/token. Không chia sẻ token hoặc URL chứa token.')
+    print('Could not connect to Telegram; check the network/token. Do not share token-bearing URLs.')
 PY
 ```
 
-Điền các ID của chính bạn vào `.env` cùng token. Giữ nguyên `TRADING_MODE=paper` và `DB_PATH=/app/data/paper.db` nếu dùng Docker. Không cần API key Bitget. Nếu có nhiều người đã nhắn bot, chọn đúng cặp ID của mình.
+Enter your own IDs and token in `.env`. For Docker, keep `TRADING_MODE=paper` and `DB_PATH=/app/data/paper.db`. No Bitget API key is needed. If several people have messaged the bot, select your own user/chat ID pair.
 
-Chạy trực tiếp với file `.env` do chính bạn chỉnh (đổi `DB_PATH=paper.db` trước):
+To run directly using a `.env` file you have edited yourself, first change `DB_PATH` to `paper.db`:
 
 ```bash
 set -a
@@ -78,9 +80,9 @@ set +a
 python3 -m bot.main
 ```
 
-Các lệnh `/help`, `/status`, `/nap`, `/von` không cần giá Bitget. `/demo long`, `/demo short`, duyệt lệnh và kiểm tra SL/TP cần mạng tới API giá công khai Bitget. Demo `python3 -m bot.demo` luôn chạy offline.
+Commands such as `/help`, `/status`, `/nap`, and `/von` do not require Bitget quotes. `/demo long`, `/demo short`, approvals, and SL/TP checks require access to Bitget's public market API. `python3 -m bot.demo` always runs offline.
 
-## 3. Thử luồng Telegram
+## 3. Try the Telegram paper workflow
 
 ```text
 /help
@@ -90,75 +92,78 @@ Các lệnh `/help`, `/status`, `/nap`, `/von` không cần giá Bitget. `/demo 
 /demo long
 ```
 
-Số dư giả lập ban đầu là 100 USDT. `/nap 200` thêm 200 USDT GIẢ; `/von 250` phân bổ 250 USDT để tính lệnh. Bấm **Duyệt mô phỏng** trong 60 giây. Bot kiểm tra lại giá Bitget, tính lại khối lượng, rồi lưu vị thế mô phỏng. Dùng `/status` để xem kết quả. Có thể thử `/demo short` khi không còn vị thế.
+The initial simulated balance is 100 USDT. `/nap 200` adds 200 simulated USDT; `/von 250` allocates a 250 USDT sizing budget. Press the paper-approval button within 60 seconds. The bot refreshes the Bitget quote, recalculates quantity, and stores a simulated position. Use `/status` to inspect it. Try `/demo short` when no position is open.
 
-`/demo` tạo tín hiệu kiểm thử thủ công với SL khoảng 1%, TP khoảng 2%. Đây không phải chiến lược đầu tư, không phải dự báo AI. Không có vòng tự tạo tín hiệu mỗi 15 phút ở phiên bản này.
+`/demo` manually creates a test signal with an approximately 1% stop loss and 2% take profit. It is not an investment strategy or an AI prediction. The basic demo does not generate signals every 15 minutes; optional research and observation services are described later.
 
-| Lệnh | Ý nghĩa |
+| Command | Purpose |
 |---|---|
-| `/nap 200` | Thêm số dư mô phỏng; không nạp tiền thật |
-| `/rut 20` | Giảm số dư mô phỏng; không rút tiền thật |
-| `/von 50` | Đổi ngân sách; không vượt tiền mô phỏng khả dụng |
-| `/status`, `/pnl` | Xem trạng thái và PnL theo giá gần nhất |
-| `/pause` | Ngừng tín hiệu mới, xóa tín hiệu chờ, tiếp tục kiểm tra SL/TP |
-| `/resume` | Bỏ pause, không gỡ khóa lỗ ngày |
-| `/demo long`, `/demo short` | Tạo tín hiệu kiểm thử trên giá Bitget |
+| `/nap 200` | Add simulated funds; no real deposit |
+| `/rut 20` | Remove simulated funds; no real withdrawal |
+| `/von 50` | Change the budget within available simulated cash |
+| `/status`, `/pnl` | Show account status and PnL at the latest stored price |
+| `/pause` | Stop new paper signals, clear pending signals, and continue position protection |
+| `/resume` | Resume operation without clearing a daily loss halt |
+| `/demo long`, `/demo short` | Create manual test signals using a public Bitget quote |
 
-Chưa có lệnh đóng khẩn cấp thủ công; cần triển khai bước tiếp theo trước live.
+A manual emergency-close command has not been implemented and would be needed before any live trading work.
 
-## 4. Quy tắc rủi ro đang có
+## 4. Paper risk rules
 
-- Rủi ro dự kiến mỗi lệnh: 0,5% số nhỏ hơn giữa ngân sách và equity mô phỏng.
-- Qty = ngân sách lỗ / (khoảng cách entry–SL + dự phòng phí và trượt giá), có giới hạn giá trị vị thế ở mức 1x vốn. Làm tròn xuống 6 chữ số: chỉ là bước giả lập, chưa áp dụng thông số hợp đồng Bitget.
-- Tối đa một vị thế. Chỉ Telegram user ID và chat ID đã cấu hình được thao tác.
-- Tín hiệu hết hạn sau 60 giây; từ chối nếu giá lệch quá 0,1%, giá cũ hơn 10 giây hoặc thời gian giá nằm trong tương lai.
-- Ngưỡng lỗ ngày: 15% equity tham chiếu đầu ngày; gồm PnL đã chốt, PnL đang mở và phí giả lập. Khi chạm ngưỡng, đóng vị thế mô phỏng và khóa mở mới.
-- Chuyển ngày 00:00 Asia/Ho_Chi_Minh khi nhận tick hợp lệ; nếu bot tắt lúc nửa đêm, baseline lấy theo tick đầu tiên sau khi chạy lại, không thể tái tạo chính xác equity lúc nửa đêm.
-- Đổi `/von` không thay baseline ngày và không gỡ khóa. Nạp/rút giả lập điều chỉnh cả cash và baseline cùng một lượng để không tính dòng tiền là lợi nhuận; thay đổi này cũng thay ngưỡng tiền tuyệt đối 15%. Khóa đã kích hoạt vẫn giữ đến ngày sau. Chỉ cho đổi vốn/nạp/rút khi không có vị thế.
-- Giá polling dùng last trade, không phải mark price. SL/TP là kiểm tra cục bộ; không có bảo vệ khi bot tắt hoặc mất mạng. Giá nhảy có thể khiến lỗ vượt dự kiến.
+- Planned risk per trade is 0.5% of the smaller of the budget and simulated equity.
+- Quantity equals the loss budget divided by entry-to-stop distance plus fee/slippage reserves, capped at 1x available capital. Quantity is rounded down to six decimal places. This is a simulation rule and does not apply Bitget contract specifications.
+- Only one position may be open. Only the configured Telegram user ID and chat ID may issue commands or approve signals.
+- Signals expire after 60 seconds. Approval rejects price drift above 0.1%, quotes older than 10 seconds, and future-dated quotes.
+- The daily loss limit is 15% of the day's reference equity, including realized PnL, unrealized PnL, and simulated fees. Reaching it closes the simulated position and blocks new entries.
+- The day rolls over at 00:00 `Asia/Ho_Chi_Minh` when a valid tick is received. If the bot is offline at midnight, the first valid tick after restart establishes the baseline; exact midnight equity cannot be reconstructed.
+- `/von` does not reset the daily baseline or clear a halt. Simulated deposits/withdrawals adjust cash and baseline by the same amount so cash flow is not counted as profit; this also changes the absolute value of the 15% limit. An existing halt remains until the next day. Budget changes and cash flows require a flat account.
+- Polling uses last-trade prices rather than mark prices. SL/TP protection runs locally and cannot operate while the bot is stopped or disconnected. Price gaps can produce losses larger than planned.
 
-Phí mỗi chiều giả định 0,06%, trượt giá mỗi chiều 0,05%; **không phải biểu phí Bitget**. Chưa tính funding, spread riêng, thanh lý, đòn bẩy thực tế hoặc hạn mức hợp đồng. Không dùng PnL này để kết luận chiến lược có lời. 15%/ngày là mức cấu hình người dùng yêu cầu, không phải mức rủi ro được khuyến nghị.
+The basic engine assumes fees of 0.06% and slippage of 0.05% **per side; these are not Bitget's published fee schedule**. It does not include funding, a separate spread model, liquidation, actual leverage, or contract limits. Do not interpret its PnL as proof of profitability. The 15% daily limit is a user-requested setting, not a recommended risk level. The V2/V3 research pipelines include funding as described below.
 
-## 5. Cấu trúc
+## 5. Project structure
 
 ```text
-bot/core.py          Logic tiền, vị thế, rủi ro và giao dịch SQLite
-bot/main.py          Telegram polling + giá công khai Bitget
-bot/demo.py          Demo offline
- tests/              Kiểm thử lõi và kiểm tra quyền Telegram
-Dockerfile           Python không cần dependency ngoài
-compose.yaml         Một dịch vụ, volume lưu trạng thái
-.env.example         Mẫu cấu hình, không có bí mật
+bot/core.py          Paper balances, positions, risk rules, and SQLite transactions
+bot/main.py          Telegram polling and public Bitget market prices
+bot/demo.py          Offline demo
+tests/               Engine, Telegram authorization, research, and forward-test checks
+Dockerfile           Basic Python runtime without third-party dependencies
+compose.yaml         Paper service with persistent account storage
+.env.example         Configuration template without secrets
 ```
 
-SQLite là lựa chọn starter để chạy ngay. Chưa có PostgreSQL, FastAPI, dashboard, Prometheus hay mô hình AI. Nhật ký audit nằm trong bảng `audit`; các phép đổi trạng thái nằm trong transaction SQLite để chống duyệt trùng và giữ dữ liệu qua restart.
+The basic engine uses SQLite for local operation. It does not include PostgreSQL, FastAPI, a dashboard, or Prometheus. ML research lives in the optional `research/` package. Audit records are stored in the `audit` table; state changes use SQLite transactions to prevent duplicate approvals and preserve account state across restarts.
 
-## 6. Việc tiếp theo trước khi tiền thật
+## 6. Work required before real-money trading
 
-1. Thay SQLite bằng PostgreSQL với migration và khóa giao dịch khi cần nhiều worker.
-2. Lưu nến 15 phút; chiến lược nền, backtest theo thời gian, phí/funding đúng và kiểm tra look-ahead bias.
-3. Huấn luyện/đánh giá mô hình AI so với chiến lược nền; chưa đặt mục tiêu cam kết lợi nhuận.
-4. Đọc số dư thật, xác định loại tài khoản Classic/UTA, bước qty, tick size, min order, margin mode và giới hạn thực từ Bitget. Không tự dùng toàn bộ tiền tài khoản cho bot.
-5. Adapter đặt lệnh có client order ID, đối soát khớp một phần, xử lý timeout chưa rõ kết quả; SL/TP phía sàn được xác nhận, lệnh reduce-only, nút đóng khẩn cấp.
-6. Dòng tiền thật phải được đối soát từ lịch sử chuyển tiền, daily baseline bền vững, đo PnL bằng mark price, theo dõi funding và quyền sở hữu vị thế.
-7. Kiểm thử môi trường demo của sàn, mất mạng, restart, lệnh trùng, xác nhận cũ, sàn từ chối SL và ngưỡng lỗ. Chỉ sau đó mới cân nhắc live với vốn giới hạn.
+1. Introduce PostgreSQL, migrations, and transaction locking if multiple workers need to share account state.
+2. Maintain 15-minute candle storage, baseline strategies, chronological backtests, realistic fees/funding, and checks for look-ahead bias.
+3. Train and evaluate ML models against baselines without promising profitability.
+4. Read actual balances and identify Classic/UTA account type, quantity increments, tick size, minimum order, margin mode, and exchange limits. Do not automatically allocate the entire account to the bot.
+5. Implement an order adapter with client order IDs, partial-fill reconciliation, ambiguous-timeout recovery, confirmed exchange-side SL/TP, reduce-only orders, and an emergency-close control.
+6. Reconcile real cash flows against transfer history, maintain a durable daily baseline, use mark prices for PnL, and track funding and position ownership.
+7. Test exchange demo execution, network failures, restarts, duplicate orders, stale approvals, rejected SL orders, and loss limits before considering live trading with limited capital.
 
-## 7. Kiểm chứng và giới hạn
+The research functionality below addresses parts of the data/model work. Exchange execution remains unimplemented.
 
-22 bài kiểm thử tự động: giới hạn khối lượng, duyệt trùng, tín hiệu hết hạn, giá cũ/lệch/tương lai/đảo thứ tự, SL/TP long/short, pause vẫn bảo vệ vị thế, khóa lỗ qua restart và đổi vốn, đổi ngày, số không hợp lệ, quyền Telegram, dòng tiền giả lập, lệnh trắng, callback sai định dạng, từ chối live và luồng Telegram offline với API giả lập.
+## 7. Validation history and limitations
 
-Ngày 03/11/2026: đã build và khởi động Docker trên máy chạy, chạy thành công 22 kiểm thử trong image Python 3.12, kết nối Telegram bằng polling và nhận giá công khai Bitget. Trạng thái sau khởi động: paper, cash 100 USDT giả lập, chưa có vị thế. Phiên bản này không có outbox bảo đảm giao tin nhắn sau lỗi transport, không có bộ phát hiện toàn bộ tick bị bỏ lỡ khi offline. Không phải sản phẩm sẵn sàng giao dịch tiền thật.
+The initial expanded suite contained 22 automated tests covering position sizing, duplicate approvals, signal expiry, stale/drifting/future/out-of-order prices, long/short SL/TP, protection while paused, daily halts across restarts and budget changes, day rollover, invalid numbers, Telegram authorization, simulated cash flows, blank commands, malformed callbacks, live-mode rejection, and an offline Telegram flow with mocked APIs.
 
-Nếu gửi phản hồi Telegram lỗi sau khi lệnh đã đổi trạng thái nhưng trước khi lưu offset, update có thể được xử lý lại (ví dụ nạp/rút mô phỏng lặp). Kiểm tra `/status` sau lỗi kết nối; chưa có cơ chế exactly-once cho toàn bộ lệnh Telegram.
+On November 3, 2026, the Docker image was built and started on the host, all 22 tests passed under Python 3.12, Telegram polling connected, and public Bitget quotes were received. Initial state was paper mode, 100 simulated USDT, and no open position. The basic service does not guarantee message delivery after transport errors or reconstruct every market tick missed while offline. It is not ready for real-money trading.
 
-Tài liệu chính thức dùng để thiết kế adapter:
+If sending a Telegram response fails after a command changes state but before the offset is saved, the update may be processed again, such as a repeated simulated deposit/withdrawal. Inspect `/status` after connection errors. Exactly-once processing is not implemented for all Telegram commands. Forward-test notifications have their own persistent event mechanism, described in section 10.
+
+Official references used for the adapters:
+
 - https://www.bitget.com/docs/catalog/classic-contract-market/classic-contract-market
 - https://core.telegram.org/bots/api#getupdates
 - https://core.telegram.org/bots/api#answercallbackquery
 
-## 8. Nghiên cứu mô hình BTCUSDT M15
+## 8. BTCUSDT M15 model research
 
-Pipeline mới tách khỏi chương trình paper cơ bản. Không cần khóa Bitget. Dùng thư viện ML trong `requirements-ml.txt` (đã ghim các phiên bản trực tiếp); image nghiên cứu có Python 3.12 và libgomp. Chạy lại:
+The research pipeline is separate from the basic paper program and requires no Bitget key. Direct ML dependencies are pinned in `requirements-ml.txt`; the research image includes Python 3.12 and libgomp. To reproduce the pipeline:
 
 ```bash
 python3 -m research.data --days 365
@@ -169,49 +174,49 @@ docker run --rm -v "$PWD:/app" bitget-paper-research python -m research.train
 docker run --rm -v "$PWD:/app" bitget-paper-research python -m research.predict
 ```
 
-Lệnh thu thập lưu `data/BTCUSDT_15m.csv` và manifest cùng tên có hậu tố `.json`. Kiểm tra nến đóng, trùng, số hữu hạn, OHLC, đủ khoảng lịch sử và thiếu nến; từ chối âm thầm huấn luyện trên lịch sử không liên tục. File tải dở được giữ, lần chạy lại ghép và kiểm tra. Mỗi lần chạy vẫn phân trang toàn khoảng yêu cầu để kiểm tra đầy đủ.
+The collector saves `data/BTCUSDT_15m.csv` and a manifest with the additional suffix `.json`. It validates closed candles, duplicates, finite numbers, OHLC relationships, history coverage, and missing bars. Incomplete history must not silently become training data. Partial downloads are retained and merged/validated on subsequent runs. Each run still paginates the full requested period to verify coverage.
 
-Đặc trưng: lợi suất 1/4/16/96 nến, ATR14, biên độ/thân nến, khối lượng tương đối, độ biến động, chênh lệch EMA12/48 với cửa sổ hữu hạn 96 nến, độ dốc và xu hướng H1 so với SMA24 giờ. Nến H1 chỉ có sau khi cả 4 nến M15 đã đóng; tính đặc trưng online giống offline. Nhãn là lợi suất từ open nến kế tiếp đến close nến thứ tư, với vùng trung tính `max(0.27%, 0.5 ATR/close)`. Đây là giả thuyết nghiên cứu đầu tiên, không phải thông số đã tối ưu.
+Features include returns over 1/4/16/96 bars, ATR14, candle range/body, relative volume, volatility, a finite-window EMA12/48 gap over 96 bars, slope, and H1 trend relative to a 24-hour SMA. H1 data is available only after all four constituent M15 bars close. Online and offline feature calculations match. Labels use returns from the next bar's open to the fourth bar's close, with a neutral band of `max(0.27%, 0.5 ATR/close)`. These are initial research hypotheses, not optimized settings.
 
-Ba ứng viên: quy tắc EMA cùng chiều H1, Logistic Regression và LightGBM. ML dùng ngưỡng điểm cố định 0.55, chưa hiệu chỉnh xác suất. Chia 80% đầu làm phát triển, 20% cuối làm holdout; ba fold walk-forward mở rộng, gap 4 nến loại nhãn chồng ranh giới. Scaler chỉ fit trên train. Chọn ứng viên bằng lợi nhuận trung bình các fold, không chọn lại bằng holdout.
+Candidates are an EMA rule aligned with H1, Logistic Regression, and LightGBM. ML signals use a fixed, uncalibrated score threshold of 0.55. The first 80% of data is used for development and the final 20% for holdout evaluation. Three expanding walk-forward folds use a four-bar gap to remove label overlap across boundaries. Scaling is fitted on training data only. The candidate is selected by mean fold return, not reselected using the holdout.
 
-Backtest dùng paper Engine với vốn đầu 100, rủi ro 0.5%/lệnh, giới hạn 1x và khóa lỗ ngày 15%. Vào open nến sau tín hiệu, SL `max(1.5 ATR, 0.3% entry)`, TP gấp hai khoảng SL, giữ tối đa 4 nến. Nếu một nến chạm cả SL và TP, tính SL trước; gap mở cửa thoát ở giá open. Gồm phí 0.06% và trượt giá 0.05% mỗi chiều; thêm kiểm tra chi phí gấp đôi. Chưa tính funding, thanh khoản, độ trễ duyệt và đường đi giá thực trong nến. Báo cáo drawdown dựa trên equity ở cuối nến, không phải toàn bộ biến động intrabar.
+Backtests use the paper engine with 100 initial USDT, 0.5% risk per trade, a 1x notional cap, and a 15% daily loss halt. Entry is at the next bar's open, SL distance is `max(1.5 ATR, 0.3% entry)`, TP distance is twice the SL distance, and the maximum holding period is four bars. If both barriers are touched in one bar, SL is processed first; opening gaps exit at the actual open. Costs include 0.06% fees and 0.05% slippage per side, plus a double-cost stress test. Funding, liquidity, approval latency, and the exact intrabar price path are excluded from this version. Drawdown uses end-of-bar equity, not every intrabar movement.
 
-Đầu ra:
+Outputs:
 
-- `artifacts/report.md`, `report.json`: kết quả, giả định và hash dữ liệu.
-- `artifacts/evaluated.joblib`: snapshot được dùng đánh giá holdout.
-- `artifacts/model.joblib`: snapshot fit lại toàn bộ nhãn đã biết để quan sát tương lai.
+- `artifacts/report.md` and `report.json`: results, assumptions, and the data hash.
+- `artifacts/evaluated.joblib`: the snapshot used for holdout evaluation.
+- `artifacts/model.joblib`: a snapshot refitted on all resolved labels for future observation.
 
-Chỉ load artifact do chính pipeline này tạo; joblib không phù hợp với file tải từ nguồn không tin cậy. Dữ liệu và artifact không được commit. Không diễn giải accuracy thành khả năng có lợi nhuận; lớp trung tính có thể chiếm phần lớn dữ liệu.
+Load only artifacts generated by this trusted local pipeline; joblib is not safe for untrusted downloads. Data and model artifacts are excluded from Git. Classification accuracy does not establish profitability, particularly when neutral labels dominate.
 
-Cổng cho đề xuất paper yêu cầu: trung bình CV dương, ít nhất 2/3 fold dương, holdout ít nhất 30 lệnh, lợi nhuận dương cả chi phí thường và gấp đôi, drawdown holdout dưới 10%. Chưa đạt thì **observe_only**, không có nút duyệt lệnh mô hình. Đây là tiêu chí sàng lọc paper, không phải tiêu chí đủ cho live. Nếu tiếp tục thử thông số sau khi đã xem holdout, phải coi holdout cũ là dữ liệu phát triển và dùng giai đoạn mới để đánh giá.
+Paper-proposal eligibility requires positive mean CV return, at least two positive folds out of three, at least 30 holdout trades, positive holdout return under normal and doubled costs, and holdout drawdown below 10%. Otherwise the model remains **observe_only** with no approval button for model-generated positions. This is a paper screening rule, not sufficient evidence for live trading. Once a holdout has been inspected, further tuning makes it development data; use a new period for subsequent evaluation.
 
-Bật tích hợp trên cùng dịch vụ/volume paper, chỉ chạy một phiên polling:
+Enable integration with the same paper service/volume, keeping only one polling instance:
 
 ```bash
 docker compose -f compose.yaml -f compose.ml.yaml up -d --build
 docker compose -f compose.yaml -f compose.ml.yaml logs --tail=50 -f
 ```
 
-- `/model`: kết quả đánh giá và trạng thái cổng paper.
-- `/predict`: dự báo theo nến M15 đã đóng gần nhất.
-- Bot quan sát một lần mỗi nến đóng, lưu audit `model_forecast`; không phát bù tín hiệu lịch sử. Tín hiệu tự động dừng khi `/pause`.
-- Nếu mô hình đạt cổng, chỉ đề xuất trong phút đầu sau nến đóng; vẫn phải duyệt Telegram trong 60 giây. SL/TP theo ATR; thời hạn giữ vị thế lưu bền vững và vẫn được kiểm tra khi pause/restart. Quá hạn khi mất mạng sẽ đóng ở tick hợp lệ tiếp theo.
-- Model quá 14 ngày hoặc thiếu nến mới nhất: không dự báo/tạo đề xuất; cần thu thập và huấn luyện lại, sau đó restart dịch vụ để load artifact mới.
-- `/demo long` và `/demo short` vẫn là kiểm thử thủ công, độc lập với kết quả ML.
+- `/model`: evaluation results and paper-proposal eligibility.
+- `/predict`: a forecast based on the latest closed M15 candle.
+- The model observes each closed bar once and records `model_forecast` audit events. It does not backfill historical signals. `/pause` stops automatic signals.
+- An eligible model may propose a position only during the first minute after the signal candle closes. Telegram approval is still required within 60 seconds. SL/TP uses ATR; position expiry is persisted and checked across pauses/restarts. If expiry occurs while disconnected, the next valid tick closes the position.
+- Models older than 14 days or missing the latest closed candle cannot forecast/propose. Collect and retrain, then restart the service to load the new artifact.
+- `/demo long` and `/demo short` remain manual tests independent of ML results.
 
-Kết quả lần chạy đầu ngày 03/11/2026: 35.040 nến liên tục/365 ngày; LightGBM được chọn nhưng **observe_only** vì chỉ có 1 lệnh ở toàn bộ ba fold và 0 lệnh ở holdout. Chưa chứng minh được lợi thế giao dịch. Xem `artifacts/report.md` để đọc số liệu đầy đủ.
+The first run on November 3, 2026 used 35,040 continuous candles covering 365 days. LightGBM was selected but remained **observe_only**: only one trade occurred across all three folds, and none in the holdout. No trading edge was established. See `artifacts/report.md` for full results.
 
-Đã chạy thành công 37 kiểm thử trên image triển khai Python 3.12, gồm đặc trưng nhân quả và đồng nhất online/offline, phân trang không mất nến, mô phỏng SL trước TP khi cùng chạm, phí, thời hạn vị thế qua restart/pause, không tạo đề xuất từ mô hình observe_only và yêu cầu duyệt trước khi mở paper. Bot triển khai đã lưu dự báo M15 vào audit; dữ liệu paper trước cập nhật được giữ nguyên.
+At that stage, all 37 tests passed in the deployed Python 3.12 image. Checks included causal and matching online/offline features, pagination without missing bars, stop-first execution when both barriers are touched, costs, expiry across restart/pause, no proposals from observe-only models, and approval before opening a paper position. The deployed bot recorded M15 forecasts in its audit log and retained prior paper state.
 
-Tài liệu tham khảo triển khai: [TimeSeriesSplit và gap](https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.TimeSeriesSplit.html), [LightGBM Python](https://lightgbm.readthedocs.io/en/stable/Python-Intro.html).
+Implementation references: [TimeSeriesSplit and gap](https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.TimeSeriesSplit.html), [LightGBM Python](https://lightgbm.readthedocs.io/en/stable/Python-Intro.html).
 
-## 9. V2 — dự đoán kết quả giao dịch và kiểm chứng tương lai
+## 9. V2 — trade outcomes and prospective validation
 
-V2 nằm riêng trong `artifacts/v2`; không thay model Telegram V1 hoặc ví paper. Mục tiêu học là **lệnh có lời ròng sau SL/TP hoặc timeout**, thay vì nhãn tăng/giảm/trung tính. Dataset vẫn lưu cờ TP trước SL để kiểm tra. Hai mô hình Logistic/Ridge và LightGBM dự đoán xác suất lời và lợi suất ròng dự kiến cho cả long và short; xác suất được hiệu chỉnh bằng sigmoid trên đoạn calibration nằm sau train. Bộ lọc cố định yêu cầu xác suất lời >=55% và lợi suất ròng dự kiến >=0.03%; không hạ ngưỡng theo kết quả đoạn cuối.
+V2 artifacts live in `artifacts/v2`, separate from V1 and the paper wallet. The learning target is **net trade profitability after SL/TP or timeout**, rather than an up/down/neutral label. The dataset also retains a TP-before-SL flag for analysis. Logistic/Ridge and LightGBM estimate win probability and expected net return for both long and short outcomes. Probabilities are calibrated with a sigmoid on a chronological segment after training. The fixed filter requires win probability >=55% and expected net return >=0.03%; thresholds are not lowered in response to the final diagnostic block.
 
-Nguồn dữ liệu: 84 ngày có đủ nến M1 và funding (API funding trả khoảng 90 ngày). Đã tải 120.960 nến M1, đối chiếu OHLC tổng hợp với M15 và tạo 15.042 ví dụ long/short có thể thực hiện. Cả nhãn và replay bao gồm độ trễ duyệt 1 phút, từ chối giá lệch >0.1%, phí/slippage, SL trước TP nếu cùng chạm trong một phút, funding thực với close M1 đại diện mark price. Funding tại đúng thời điểm vào không tính; vị thế giữ đến thời điểm funding/expiry tính funding một lần. Các giả định này chưa mô phỏng thanh khoản hay đường đi giá trong một phút.
+The study uses 84 days with complete M1 and funding coverage; the funding API returned approximately 90 days. It downloaded 120,960 M1 candles, checked their aggregated OHLC against M15, and generated 15,042 executable long/short examples. Labels and replay include a one-minute approval delay, rejection for price drift >0.1%, fees/slippage, stop-first ordering if both barriers are touched in the same minute, and actual funding rates using M1 close as a mark-price proxy. Funding at the exact entry time is excluded; positions held through settlement/expiry are charged once. Liquidity and the price path within a minute are not fully modeled.
 
 ```bash
 python3 -m research.microdata --days 84
@@ -221,76 +226,76 @@ docker run --rm -v "$PWD:/app" bitget-paper-research python -m research.improve
 docker run --rm -v "$PWD:/app" bitget-paper-research python -m research.improve --horizon 240
 ```
 
-`artifacts/v2/report.md` là nghiên cứu giữ tối đa 1 giờ; `artifacts/v2_240/report.md` là cấu hình giữ tối đa 4 giờ, đều lấy tín hiệu M15. Hai cửa sổ đầu dùng chọn ứng viên; cửa sổ cuối dùng chẩn đoán. Toàn bộ giai đoạn đã được xem trong nghiên cứu trước, nên các số liệu này được ghi rõ là **thăm dò lịch sử**, không gọi là holdout hoàn toàn mới. Không so trực tiếp accuracy V1 và V2 vì nhãn và khoảng dữ liệu khác nhau. Chỉ số Brier so với dự báo tỷ lệ lời cố định từ calibration giúp kiểm tra chất lượng xác suất, không chứng minh lợi thế giao dịch.
+`artifacts/v2/report.md` covers a maximum one-hour hold; `artifacts/v2_240/report.md` covers a maximum four-hour hold. Both use M15 signals. The first two evaluation windows select the candidate; the final window provides diagnostics. This period was already viewed in earlier research, so results are explicitly **exploratory historical analysis**, not a fresh untouched holdout. V1/V2 accuracy cannot be compared directly because labels and periods differ. Brier scores against a constant calibration-period win-rate forecast assess probability quality, not trading profitability.
 
-Kết quả: cấu hình 1 giờ không có giao dịch đạt điều kiện; cấu hình 4 giờ có 1 giao dịch thắng ở cửa sổ chọn ứng viên và 0 giao dịch ở đoạn chẩn đoán cuối. Chưa đủ bằng chứng cải thiện tỷ lệ thắng. Tất cả artifact V2 luôn giữ `paper_proposals_enabled=false`; không có tự động nâng cấp sang đặt lệnh.
+The one-hour configuration produced no qualifying trades. The four-hour configuration produced one winning trade during candidate selection and none in the final diagnostic block. This is insufficient evidence of improved trade win rates. All V2 artifacts keep `paper_proposals_enabled=false`; no automatic promotion to order placement is implemented.
 
-Dịch vụ quan sát tương lai độc lập:
+Run the independent prospective observation service:
 
 ```bash
 docker compose -f compose.research.yaml up -d --build
 docker compose -f compose.research.yaml logs --tail=20
 ```
 
-Dịch vụ không nhận token Telegram/Bitget và không mount volume ví paper. Nó ghi dự báo trong phút đầu sau mỗi nến M15 đóng, chỉ cho nến nằm sau giai đoạn nghiên cứu, không ghi lùi dự báo sau khi đã thấy diễn biến giá. Lưu cả hai hướng như mẫu đối chứng và tối đa một hướng đạt bộ lọc. Sau 1 giờ, chấm lời/lỗ bằng M1 và funding rồi lưu vào `data/shadow/forward.db`. Những mẫu này chồng lấn thời gian, là kết quả giả định trên một đơn vị vị thế, **không phải PnL của danh mục giao dịch**. Thống kê tách theo hash model để không gộp các phiên bản.
+This service receives no Telegram/Bitget credentials and does not mount the paper wallet volume. It records forecasts during the first minute after each M15 close, only for bars after the research period. It does not backdate predictions after observing subsequent prices. Both directions are retained as controls, with at most one direction passing the filter. After one hour, outcomes are scored using M1 and funding and stored in `data/shadow/forward.db`. Samples overlap in time and represent hypothetical unit-position outcomes, **not portfolio PnL**. Statistics are separated by model hash.
 
-Model quá 14 ngày sẽ ngừng ghi dự báo mới; cần huấn luyện lại, lưu thành phiên bản mới và restart dịch vụ. Bot Telegram `/model`, `/predict` vẫn là V1; V2 đang quan sát riêng. Muốn xem số mẫu mới:
+Models older than 14 days stop recording new predictions. Retrain, retain a new version, and restart the service. Telegram `/model` and `/predict` still refer to V1; V2 is observed separately. To inspect newly recorded samples:
 
 ```bash
 docker compose -f compose.research.yaml exec -T shadow python -c 'from research.shadow import Shadow; print(Shadow("/app/artifacts/v2", "/app/shadow/forward.db").summary())'
 ```
 
-Việc tiếp theo để cải thiện giao dịch thực chất là đánh giá các dự báo tương lai đã đóng băng trước khi biết kết quả. Nếu tiếp tục thay dữ liệu/đặc trưng/SL/TP hoặc ngưỡng thì giữ riêng hash và đánh giá phiên bản mới; không cộng kết quả nghiên cứu lịch sử vào tỷ lệ thắng tương lai.
+Further progress requires evaluating predictions frozen before their outcomes are known. Changes to data, features, SL/TP, or thresholds should be versioned and evaluated separately. Do not include historical research results in prospective win-rate statistics.
 
-## 10. Theo dõi forward test V2 bằng Telegram
+## 10. Monitor V2 forward tests through Telegram
 
-Bot cấu hình bằng `compose.yaml` + `compose.ml.yaml` hiện đọc ledger V2 qua mount **chỉ đọc**. Dịch vụ V2 ghi dữ liệu và tạo event thông báo trong cùng transaction SQLite; bot Telegram đọc event rồi lưu cursor sau khi gửi thành công. Mất mạng sẽ thử gửi lại; timeout sau khi Telegram đã nhận có thể gây thông báo trùng, không tạo giao dịch.
+With `compose.yaml` and `compose.ml.yaml`, the bot reads the V2 ledger through a **read-only** mount. The V2 service records state and notification events in the same SQLite transaction. Telegram reads events and saves its cursor after successful delivery. Connection failures are retried. A timeout after Telegram accepts a message can cause duplicate notifications, but does not create a trade.
 
 ```bash
 docker compose -f compose.research.yaml up -d --build
 docker compose -f compose.yaml -f compose.ml.yaml up -d --build
 ```
 
-Lệnh trên Telegram:
+Telegram commands:
 
-- `/forward`: heartbeat, số mẫu, số đã chấm/bị loại, tỷ lệ lời ròng và lợi suất trung bình; tách toàn bộ đối chứng với tín hiệu đạt bộ lọc.
-- `/predict2`: dự báo V2 gần nhất đã được ghi trước diễn biến giá, gồm xác suất lời, giá tham chiếu, SL/TP và thời hạn. Không tính lại dự báo cũ bằng giá mới.
-- `/results`: tối đa 4 kết quả gần nhất của phiên bản model đang chạy. Mẫu bị loại vì lệch giá không tính là thua.
-- `/model2`: mục tiêu mô hình V2 và giới hạn đánh giá.
-- `/pause`: ngừng thông báo tự động; V2 vẫn thu thập/chấm dữ liệu để không làm lệch mẫu. Các thông báo trong lúc pause được bỏ qua; vẫn xem lại bằng `/predict2`, `/results`, `/forward`. `/resume` bật lại thông báo mới.
+- `/forward`: service heartbeat, recorded/scored/rejected samples, net win rate, and mean net return, separating controls from qualifying signals and preferred directions.
+- `/predict2`: the latest V2 forecast recorded before subsequent price action, including estimated profitability, reference price, SL/TP, and expiry. Old forecasts are not recalculated using new prices.
+- `/results`: up to four recent preferred-direction results for the current model version. Rejected price-drift samples are not counted as losses.
+- `/model2`: V2 objectives and evaluation limitations.
+- `/pause`: stop automatic notifications while V2 continues collecting/scoring data to avoid sample selection bias. Notifications during the pause are skipped, but records remain accessible through `/predict2`, `/results`, and `/forward`. `/resume` enables new notifications.
 
-Thông báo tự động gồm một cặp dự báo long/short cho mỗi nến đóng và kết quả từng hướng khi hết thời hạn đánh giá. Không có nút duyệt hay mở vị thế từ thông báo V2. Khi `FORWARD_DB` được cấu hình, thông báo tự động V1 được tắt để tránh nhầm; `/model`, `/predict` vẫn truy vấn V1 thủ công.
+The worker stores both long and short forecasts for each closed candle. Following the single-direction presentation update below, automatic notifications show only the preferred direction and its eventual result. V2 notifications contain no order-approval or position-opening controls. Configuring `FORWARD_DB` disables automatic V1 messages; `/model` and `/predict` still query V1 manually.
 
-Đọc tỷ lệ có lời ròng cùng số mẫu và chi phí. Số mẫu đã ghi chưa phải số giao dịch thật; mẫu long/short đối chứng và các kỳ liên tiếp có thể chồng lấn. Không cộng dồn lợi suất các mẫu thành lợi nhuận danh mục hoặc drawdown. Chưa có mẫu đã chấm thì hiển thị “chưa đủ mẫu”, không báo tỷ lệ thắng 0%.
+Read net win rates together with sample counts and costs. Recorded samples are not actual exchange trades; control directions and consecutive periods may overlap. Do not sum sample returns into portfolio profit or drawdown. With no scored samples, the bot reports insufficient data rather than a 0% win rate.
 
-Ngày 03/11/2026: đã xác nhận cặp dự báo thật đầu tiên ghi lúc **22:15:07 Asia/Ho_Chi_Minh**, trước thời điểm vào giả định 22:16; cả hai hướng không đạt bộ lọc. Thời hạn đánh giá là 23:15, chấm khi có đủ M1 và funding. Thông tin này không phải bằng chứng tỷ lệ thắng; chỉ xác nhận pipeline đã ghi dự báo trước kết quả.
+On November 3, 2026, the first live-market forecast pair was confirmed recorded at **22:15:07 Asia/Ho_Chi_Minh**, before its hypothetical 22:16 entry. Neither direction passed the filter. Its evaluation deadline was 23:15, with scoring dependent on complete M1 and funding data. This established recording before outcomes, not a trade win rate.
 
-Đã kiểm chứng 74 kiểm thử trên image bot triển khai, đọc SQLite qua mount chỉ đọc, cursor thông báo tiến sau khi gửi thành công và gửi bảng `/forward` thật tới chat Telegram đã cấu hình. Tại thời điểm xác minh đầu tiên: 2 mẫu đối chứng, 0 mẫu đã chấm, 0 tín hiệu đạt bộ lọc; chưa có tỷ lệ thắng thực tế để công bố.
+At that stage, 74 tests passed on the deployed image. Read-only SQLite access, cursor advancement after successful delivery, and an actual `/forward` status message to the configured Telegram chat were verified. The first validation snapshot contained two controls, zero scored samples, and zero qualifying signals; no prospective win rate was available then.
 
-### Một phương án duy nhất: hướng, đòn bẩy, SL/TP
+### One plan: direction, leverage, SL, and TP
 
-Thông báo V2 và `/predict2` hiện chỉ hiển thị **một hướng ưu tiên**. Nếu có hướng đạt bộ lọc, ưu tiên hướng đó; nếu chưa có, chọn lợi suất ròng dự kiến cao hơn, rồi xác suất lời cao hơn khi hòa. Hòa hoàn toàn dùng thứ tự tên hướng cố định, không xem kết quả tương lai. Đây là thay đổi cách trình bày/chấm hướng ưu tiên, không phải huấn luyện một mô hình có tỷ lệ thắng mới.
+V2 notifications and `/predict2` display **one preferred direction**. A qualifying direction takes priority. Otherwise, the higher expected net return wins, followed by higher win probability when tied. An exact tie uses a deterministic side-name ordering without consulting future outcomes. This changes presentation and preferred-direction scoring; it does not train a new model with a different win rate.
 
-Đòn bẩy hiển thị **1x cố định**, không phải đòn bẩy tối ưu do mô hình học được. SL cách giá tham chiếu `max(1.5 ATR14, 0.3% giá)`, TP gấp hai khoảng SL; short đảo chiều so với long. Giá tham chiếu là giá của nến tín hiệu đã đóng, không phải báo giá vào hiện tại. Nếu không đạt bộ lọc, vẫn ghi rõ hướng ưu tiên chỉ để kiểm chứng và không tạo lệnh.
+Displayed leverage is **fixed at 1x**, not optimized or learned by the model. SL distance from the reference price is `max(1.5 ATR14, 0.3% price)` and TP distance is twice that; short levels reverse the long arrangement. The reference belongs to the closed signal candle and is not a current entry quote. Unqualified plans remain explicitly labeled as observation-only and do not create orders.
 
-`/results` và thông báo kết quả tự động chỉ đưa hướng ưu tiên của từng nến. `/forward` thêm nhóm “Hướng ưu tiên” để đo tỷ lệ có lời của đúng một lựa chọn mỗi nến; giữ riêng nhóm đạt bộ lọc và cả hai hướng đối chứng. Worker vẫn lưu cả hai hướng gốc; không thay điểm dự báo hoặc kết quả đã ghi. Các hướng liên tiếp vẫn có thể chồng lấn thời gian, không phải PnL danh mục.
+`/results` and automatic result notifications show only each bar's preferred direction. `/forward` includes a preferred-direction group for measuring one choice per bar, while retaining separate qualifying-signal and two-direction control groups. The worker preserves both original forecasts without changing stored scores or outcomes. Consecutive preferred directions may still overlap and do not represent portfolio PnL.
 
-## 11. V3 — thử nghiệm các chỉ báo thông dụng
+## 11. V3 — common technical indicators
 
-Đã bổ sung **RSI14, MACD12/26/9, Bollinger Bands20/2, ADX14 và DI+/DI-, Stochastic14/3/3, OBV, rolling VWAP20, MFI14** bằng TA-Lib 0.6.8. Cùng 14 đặc trưng nền và các tương tác theo hướng long/short, V3 dùng 42 đầu vào. Đây vẫn là các biến đổi của giá và khối lượng, không phải nguồn dữ liệu độc lập như sổ lệnh/tin tức.
+V3 adds **RSI14, MACD12/26/9, Bollinger Bands20/2, ADX14 and DI+/DI-, Stochastic14/3/3, OBV, rolling VWAP20, and MFI14** using TA-Lib 0.6.8. Combined with the 14 base features and directional interactions, it uses 42 inputs. These are transformations of price and volume, not independent information sources such as order books or news.
 
-Mỗi chỉ báo được tính bằng TA-Lib trên đúng 200 nến đã đóng tại thời điểm dự báo; không tính từ nến đang chạy. Phần khởi tạo EMA/Wilder được giới hạn lại trong cửa sổ này để huấn luyện và online giống nhau, nên có thể lệch nhỏ với biểu đồ sử dụng lịch sử khởi tạo dài hơn. Bộ thu thập online V3 lấy 300 nến để còn ít nhất 200 nến đóng sau khi loại nến đang chạy. OBV dùng thay đổi 20 nến chuẩn hóa theo khối lượng; VWAP là rolling 20 nến, không phải VWAP neo phiên.
+Each indicator is computed with TA-Lib on exactly 200 closed bars available at prediction time; the active candle is excluded. EMA/Wilder initialization is reset within this window so training and online calculations match. Values may differ slightly from charts initialized using longer histories. The V3 online collector requests 300 candles to retain at least 200 closed bars after removing the active candle. OBV uses its 20-bar change normalized by volume; VWAP is a rolling 20-bar value, not session-anchored VWAP.
 
-So sánh công bằng chỉ đổi đặc trưng: cùng mẫu/nhãn, tham số LightGBM, calibration theo thời gian, SL/TP, độ trễ và chi phí. Báo cáo ở `artifacts/v3/report.md`, chi tiết giao dịch từng fold trong các CSV cùng thư mục. Các kết quả lịch sử vẫn là thăm dò.
+The matched comparison changes only features: examples/labels, LightGBM parameters, chronological calibration, SL/TP, latency, and costs are held constant. Results are saved in `artifacts/v3/report.md`, with per-fold trade details in CSV files in the same directory. Historical results remain exploratory.
 
-Kết quả đoạn chẩn đoán cuối khi ép chọn một hướng mỗi nến và replay một vị thế:
+Final diagnostic results when forcing one preferred direction per bar and replaying a single-position portfolio:
 
-| Bộ đặc trưng | Lệnh | Tỷ lệ lời sau chi phí | Lợi nhuận giả lập |
+| Feature set | Trades | Net win rate | Simulated return |
 |---|---:|---:|---:|
-| Nền V2 | 538 | 19.70% | -60.57% |
-| Thêm chỉ báo V3 | 540 | 18.33% | -61.73% |
+| V2 baseline | 538 | 19.70% | -60.57% |
+| V3 with indicators | 540 | 18.33% | -61.73% |
 
-Không có lệnh nào đạt bộ lọc xác suất/edge ở cả hai nhánh. Vì chưa cải thiện, **V2 vẫn là mô hình mặc định**, V3 chỉ chạy thử song song. Đòn bẩy 1x, các ngưỡng và quy tắc SL/TP không đổi; không bật giao dịch tiền thật.
+Neither branch produced trades passing the probability/edge filter. Since this did not establish improvement, **V2 remains the default model** and V3 runs as a parallel observation experiment. Leverage stays at 1x, thresholds and SL/TP rules are unchanged, and real-money trading remains disabled.
 
 ```bash
 docker build -f Dockerfile.research -t bitget-paper-indicators .
@@ -299,8 +304,8 @@ docker compose -f compose.research.yaml up -d --build shadow-indicators
 docker compose -f compose.yaml -f compose.ml.yaml up -d --build
 ```
 
-V3 ghi tương lai riêng tại `data/shadow/forward_v3.db`, không trộn thống kê V2. `/indicators` trên Telegram xem thử nghiệm V3 với một hướng ưu tiên, SL/TP, RSI/ADX/MACD tại lúc dự báo; nếu chưa đến cửa sổ nến mới sẽ báo đang chờ, không ghi lùi dự báo. `/predict2` và thông báo tự động vẫn dùng V2; không gửi thêm một luồng thông báo V3 để tránh nhầm hai hướng.
+V3 records prospective data separately in `data/shadow/forward_v3.db`; its statistics are not mixed with V2. Telegram `/indicators` shows the experimental V3 plan, SL/TP, and RSI/ADX/MACD values frozen at prediction time. Until the next valid candle window, it reports that it is waiting rather than backdating a prediction. `/predict2` and automatic notifications remain on V2; V3 does not add a second automatic message stream.
 
-88 kiểm thử đã đạt, gồm đối chiếu TA-Lib/công thức Bollinger-VWAP, chỉ báo không nhìn tương lai, khớp online/offline trên cửa sổ 200 nến, giá/khối lượng không đổi không tạo vô cực, schema model cũ vẫn tương thích và lưu snapshot chỉ báo để không tính lại theo giá mới.
+All 88 tests passed, including TA-Lib and direct Bollinger/VWAP formula checks, no future-data leakage, matching online/offline calculations over 200-bar windows, finite outputs under constant prices/volumes, compatibility with older model schemas, and frozen indicator snapshots instead of recalculation using later prices.
 
-Nguồn công thức/thư viện: [TA-Lib momentum](https://ta-lib.github.io/ta-lib-python/func_groups/momentum_indicators.html), [Bollinger Bands](https://ta-lib.github.io/ta-lib-python/func_groups/overlap_studies.html), [TA-Lib 0.6.8](https://pypi.org/project/TA-Lib/0.6.8/).
+Formula/library references: [TA-Lib momentum](https://ta-lib.github.io/ta-lib-python/func_groups/momentum_indicators.html), [Bollinger Bands](https://ta-lib.github.io/ta-lib-python/func_groups/overlap_studies.html), [TA-Lib 0.6.8](https://pypi.org/project/TA-Lib/0.6.8/).
